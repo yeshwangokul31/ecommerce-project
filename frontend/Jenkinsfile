@@ -11,7 +11,7 @@ pipeline {
         IMAGE_TAG = "${BUILD_NUMBER}"
 
         EKS_CLUSTER_NAME = 'ecommerce-eks-cluster'
-        K8S_NAMESPACE = 'default'
+        K8S_NAMESPACE = 'ecommerce'
         K8S_DEPLOYMENT = 'ecommerce-frontend'
         K8S_CONTAINER = 'ecommerce-frontend'
     }
