@@ -11,7 +11,7 @@ pipeline {
         IMAGE_TAG = "${BUILD_NUMBER}"
 
         EKS_CLUSTER_NAME = 'ecommerce-eks-cluster'
-        K8S_NAMESPACE = 'ecommerce'
+        K8S_NAMESPACE = 'default'
         K8S_DEPLOYMENT = 'ecommerce-frontend'
         K8S_CONTAINER = 'ecommerce-frontend'
     }
@@ -84,8 +84,6 @@ pipeline {
         stage('Configure EKS') {
             steps {
                 sh '''
-                    aws sts get-caller-identity
-
                     aws eks update-kubeconfig \
                     --region $AWS_REGION \
                     --name $EKS_CLUSTER_NAME
@@ -95,38 +93,21 @@ pipeline {
             }
         }
 
-        stage('Create Namespace') {
+        stage('Deploy Frontend') {
             steps {
                 sh '''
-                    kubectl apply -f kubernetes/namespace.yaml
-                '''
-            }
-        }
+                    echo "Applying frontend deployment..."
 
-        stage('Deploy Frontend Manifest') {
-            steps {
-                sh '''
-                    echo "Applying frontend Kubernetes manifests..."
-
-                    kubectl apply -f kubernetes/frontend/ \
+                    kubectl apply -f kubernetes/frontend/frontend-deployment.yaml \
                     -n $K8S_NAMESPACE
 
-                    echo "Checking frontend deployment..."
-
-                    kubectl get deployment $K8S_DEPLOYMENT \
-                    -n $K8S_NAMESPACE
-                '''
-            }
-        }
-
-        stage('Update Frontend Image') {
-            steps {
-                sh '''
                     echo "Updating frontend image..."
 
                     kubectl set image deployment/$K8S_DEPLOYMENT \
                     $K8S_CONTAINER=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG \
                     -n $K8S_NAMESPACE
+
+                    echo "Waiting for frontend rollout..."
 
                     kubectl rollout status deployment/$K8S_DEPLOYMENT \
                     -n $K8S_NAMESPACE \
@@ -138,16 +119,13 @@ pipeline {
         stage('Verify Deployment') {
             steps {
                 sh '''
-                    echo "Frontend Deployment Status"
-
+                    echo "Frontend Deployments"
                     kubectl get deployments -n $K8S_NAMESPACE
 
                     echo "Frontend Pods"
-
                     kubectl get pods -n $K8S_NAMESPACE
 
                     echo "Frontend Services"
-
                     kubectl get services -n $K8S_NAMESPACE
                 '''
             }
