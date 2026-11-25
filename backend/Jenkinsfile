@@ -8,6 +8,8 @@ pipeline {
         AWS_REGION = 'ap-south-1'
         AWS_ACCOUNT_ID = '102186470246'
         ECR_REPOSITORY = 'ecommerce-backend'
+        CLUSTER_NAME = 'ecommerce-eks-cluster'
+        NAMESPACE = 'ecommerce'
         IMAGE_TAG = "${BUILD_NUMBER}"
     }
 
@@ -73,6 +75,69 @@ pipeline {
                         $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG
                 '''
             }
+        }
+
+        // EKS CONFIGURATION
+
+        stage('Configure EKS Cluster') {
+            steps {
+                sh '''
+                    aws sts get-caller-identity
+
+                    aws eks update-kubeconfig \
+                        --region $AWS_REGION \
+                        --name $CLUSTER_NAME
+
+                    kubectl get nodes
+                '''
+            }
+        }
+
+        // BACKEND DEPLOYMENT
+
+        stage('Deploy Backend') {
+            steps {
+                sh '''
+                    kubectl apply -f kubernetes/namespace.yaml
+
+                    kubectl apply -f kubernetes/backend/
+
+                    kubectl set image deployment/backend \
+                        backend=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG \
+                        -n $NAMESPACE
+
+                    kubectl rollout status deployment/backend \
+                        -n $NAMESPACE \
+                        --timeout=5m
+                '''
+            }
+        }
+
+        // VALIDATE DEPLOYMENT
+
+        stage('Verify Backend Deployment') {
+            steps {
+                sh '''
+                    echo "Checking backend pods..."
+                    kubectl get pods -n $NAMESPACE
+
+                    echo "Checking backend deployment..."
+                    kubectl get deployment backend -n $NAMESPACE
+
+                    echo "Checking backend service..."
+                    kubectl get svc backend -n $NAMESPACE
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Backend successfully deployed to EKS!'
+        }
+
+        failure {
+            echo 'Backend deployment failed. Check Jenkins console output.'
         }
     }
 }

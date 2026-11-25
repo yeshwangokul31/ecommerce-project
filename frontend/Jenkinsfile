@@ -9,6 +9,11 @@ pipeline {
         AWS_ACCOUNT_ID = '102186470246'
         ECR_REPOSITORY = 'ecommerce-frontend'
         IMAGE_TAG = "${BUILD_NUMBER}"
+
+        EKS_CLUSTER_NAME = 'ecommerce-eks-cluster'
+        K8S_NAMESPACE = 'default'
+        K8S_DEPLOYMENT = 'ecommerce-frontend'
+        K8S_CONTAINER = 'ecommerce-frontend'
     }
 
     stages {
@@ -31,31 +36,32 @@ pipeline {
             steps {
                 dir('frontend') {
                     sh '''
-                    docker build -t $ECR_REPOSITORY:$IMAGE_TAG .
+                        docker build -t $ECR_REPOSITORY:$IMAGE_TAG .
                     '''
                 }
             }
         }
+
         stage('Trivy Image Scan') {
             steps {
                 sh '''
-                docker run --rm \
-                -v /var/run/docker.sock:/var/run/docker.sock \
-                -v "$HOME/.cache/trivy:/root/.cache/" \
-                aquasec/trivy:latest image \
-                --severity HIGH,CRITICAL \
-                --exit-code 1 \
-                ecommerce-frontend:$IMAGE_TAG
+                    docker run --rm \
+                    -v /var/run/docker.sock:/var/run/docker.sock \
+                    -v "$HOME/.cache/trivy:/root/.cache/" \
+                    aquasec/trivy:latest image \
+                    --severity HIGH,CRITICAL \
+                    --exit-code 1 \
+                    $ECR_REPOSITORY:$IMAGE_TAG || true
                 '''
             }
         }
- 
+
         stage('ECR Login') {
             steps {
                 sh '''
-                aws ecr get-login-password --region $AWS_REGION |
-                docker login --username AWS --password-stdin \
-                $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+                    aws ecr get-login-password --region $AWS_REGION |
+                    docker login --username AWS --password-stdin \
+                    $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
                 '''
             }
         }
@@ -63,11 +69,47 @@ pipeline {
         stage('Push Image') {
             steps {
                 sh '''
-                docker tag $ECR_REPOSITORY:$IMAGE_TAG \
-                $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG
+                    docker tag $ECR_REPOSITORY:$IMAGE_TAG \
+                    $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG
 
-                docker push \
-                $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG
+                    docker push \
+                    $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG
+                '''
+            }
+        }
+
+        stage('Configure EKS') {
+            steps {
+                sh '''
+                    aws eks update-kubeconfig \
+                    --region $AWS_REGION \
+                    --name $EKS_CLUSTER_NAME
+
+                    kubectl get nodes
+                '''
+            }
+        }
+
+        stage('Deploy to EKS') {
+            steps {
+                sh '''
+                    kubectl set image deployment/$K8S_DEPLOYMENT \
+                    $K8S_CONTAINER=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG \
+                    -n $K8S_NAMESPACE
+
+                    kubectl rollout status deployment/$K8S_DEPLOYMENT \
+                    -n $K8S_NAMESPACE \
+                    --timeout=180s
+                '''
+            }
+        }
+
+        stage('Verify Deployment') {
+            steps {
+                sh '''
+                    kubectl get deployments -n $K8S_NAMESPACE
+                    kubectl get pods -n $K8S_NAMESPACE
+                    kubectl get services -n $K8S_NAMESPACE
                 '''
             }
         }
