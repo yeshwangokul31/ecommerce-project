@@ -6,39 +6,49 @@ metadata:
   namespace: ecommerce
 spec:
   replicas: 2
+
   selector:
     matchLabels:
       app: backend
+
   template:
     metadata:
       labels:
         app: backend
+
     spec:
       containers:
         - name: backend
           image: 102186470246.dkr.ecr.ap-south-1.amazonaws.com/ecommerce-backend:latest
           imagePullPolicy: Always
+
           ports:
             - name: http
               containerPort: 8000
+
           env:
             - name: DB_HOST
               value: mysql
+
             - name: DB_USER
               value: appuser
+
             - name: DB_NAME
               value: ecommerce
+
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: mysql-secret
                   key: MYSQL_PASSWORD
+
           readinessProbe:
             httpGet:
               path: /api/health
               port: 8000
             initialDelaySeconds: 10
             periodSeconds: 10
+
           livenessProbe:
             httpGet:
               path: /api/health

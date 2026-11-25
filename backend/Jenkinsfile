@@ -10,7 +10,10 @@ pipeline {
         ECR_REPOSITORY = 'ecommerce-backend'
         CLUSTER_NAME = 'ecommerce-eks-cluster'
         NAMESPACE = 'ecommerce'
+        DEPLOYMENT_NAME = 'ecommerce-backend'
+        CONTAINER_NAME = 'backend'
         IMAGE_TAG = "${BUILD_NUMBER}"
+        ECR_URI = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
     }
 
     stages {
@@ -50,7 +53,7 @@ pipeline {
                         aquasec/trivy:latest image \
                         --severity HIGH,CRITICAL \
                         --exit-code 1 \
-                        ecommerce-backend:$IMAGE_TAG || true
+                        $ECR_REPOSITORY:$IMAGE_TAG || true
                 '''
             }
         }
@@ -59,8 +62,7 @@ pipeline {
             steps {
                 sh '''
                     aws ecr get-login-password --region $AWS_REGION |
-                    docker login --username AWS --password-stdin \
-                        $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+                    docker login --username AWS --password-stdin $ECR_URI
                 '''
             }
         }
@@ -69,15 +71,13 @@ pipeline {
             steps {
                 sh '''
                     docker tag $ECR_REPOSITORY:$IMAGE_TAG \
-                        $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG
+                        $ECR_URI/$ECR_REPOSITORY:$IMAGE_TAG
 
                     docker push \
-                        $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG
+                        $ECR_URI/$ECR_REPOSITORY:$IMAGE_TAG
                 '''
             }
         }
-
-        // EKS CONFIGURATION
 
         stage('Configure EKS Cluster') {
             steps {
@@ -93,27 +93,30 @@ pipeline {
             }
         }
 
-        // BACKEND DEPLOYMENT
+        stage('Create Namespace') {
+            steps {
+                sh '''
+                    kubectl create namespace $NAMESPACE \
+                        --dry-run=client -o yaml | kubectl apply -f -
+                '''
+            }
+        }
 
         stage('Deploy Backend') {
             steps {
                 sh '''
-                    kubectl apply -f kubernetes/namespace.yaml
+                    kubectl apply -f kubernetes/backend/ -n $NAMESPACE
 
-                    kubectl apply -f kubernetes/backend/
-
-                    kubectl set image deployment/backend \
-                        backend=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG \
+                    kubectl set image deployment/$DEPLOYMENT_NAME \
+                        $CONTAINER_NAME=$ECR_URI/$ECR_REPOSITORY:$IMAGE_TAG \
                         -n $NAMESPACE
 
-                    kubectl rollout status deployment/backend \
+                    kubectl rollout status deployment/$DEPLOYMENT_NAME \
                         -n $NAMESPACE \
                         --timeout=5m
                 '''
             }
         }
-
-        // VALIDATE DEPLOYMENT
 
         stage('Verify Backend Deployment') {
             steps {
@@ -122,10 +125,10 @@ pipeline {
                     kubectl get pods -n $NAMESPACE
 
                     echo "Checking backend deployment..."
-                    kubectl get deployment backend -n $NAMESPACE
+                    kubectl get deployment $DEPLOYMENT_NAME -n $NAMESPACE
 
                     echo "Checking backend service..."
-                    kubectl get svc backend -n $NAMESPACE
+                    kubectl get svc -n $NAMESPACE
                 '''
             }
         }
