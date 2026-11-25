@@ -1,0 +1,62 @@
+
+pipeline {
+    agent {
+        label 'react-agent'
+    }
+
+    environment {
+        AWS_REGION = 'ap-south-1'
+        AWS_ACCOUNT_ID = '102186470246'
+        ECR_REPOSITORY = 'ecommerce-frontend'
+        IMAGE_TAG = "${BUILD_NUMBER}"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Frontend Build') {
+            steps {
+                dir('frontend') {
+                    sh 'npm install'
+                    sh 'npm run build'
+                }
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                dir('frontend') {
+                    sh '''
+                    docker build -t $ECR_REPOSITORY:$IMAGE_TAG .
+                    '''
+                }
+            }
+        }
+
+        stage('ECR Login') {
+            steps {
+                sh '''
+                aws ecr get-login-password --region $AWS_REGION |
+                docker login --username AWS --password-stdin \
+                $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+                '''
+            }
+        }
+
+        stage('Push Image') {
+            steps {
+                sh '''
+                docker tag $ECR_REPOSITORY:$IMAGE_TAG \
+                $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG
+
+                docker push \
+                $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG
+                '''
+            }
+        }
+    }
+}

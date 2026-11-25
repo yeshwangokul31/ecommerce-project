@@ -1,0 +1,26 @@
+
+pipeline {
+    agent {
+        label 'db-agent'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Validate SQL') {
+            steps {
+                dir('database') {
+                    sh '''
+                    test -s init.sql
+                    grep -qi "CREATE TABLE" init.sql
+                    echo "Database SQL validation successful"
+                    '''
+                }
+            }
+        }
+    }
+}
