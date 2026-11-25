@@ -17,7 +17,6 @@ pipeline {
     }
 
     stages {
-
         stage('Checkout') {
             steps {
                 checkout scm
@@ -49,12 +48,12 @@ pipeline {
             steps {
                 sh '''
                     docker run --rm \
-                    -v /var/run/docker.sock:/var/run/docker.sock \
-                    -v "$HOME/.cache/trivy:/root/.cache/" \
-                    aquasec/trivy:latest image \
-                    --severity HIGH,CRITICAL \
-                    --exit-code 1 \
-                    $ECR_REPOSITORY:$IMAGE_TAG || true
+                        -v /var/run/docker.sock:/var/run/docker.sock \
+                        -v "$HOME/.cache/trivy:/root/.cache/" \
+                        aquasec/trivy:latest image \
+                        --severity HIGH,CRITICAL \
+                        --exit-code 1 \
+                        $ECR_REPOSITORY:$IMAGE_TAG || true
                 '''
             }
         }
@@ -63,8 +62,8 @@ pipeline {
             steps {
                 sh '''
                     aws ecr get-login-password --region $AWS_REGION |
-                    docker login --username AWS --password-stdin \
-                    $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+                        docker login --username AWS --password-stdin \
+                        $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
                 '''
             }
         }
@@ -73,10 +72,10 @@ pipeline {
             steps {
                 sh '''
                     docker tag $ECR_REPOSITORY:$IMAGE_TAG \
-                    $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG
+                        $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG
 
                     docker push \
-                    $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG
+                        $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG
                 '''
             }
         }
@@ -85,8 +84,8 @@ pipeline {
             steps {
                 sh '''
                     aws eks update-kubeconfig \
-                    --region $AWS_REGION \
-                    --name $EKS_CLUSTER_NAME
+                        --region $AWS_REGION \
+                        --name $EKS_CLUSTER_NAME
 
                     kubectl get nodes
                 '''
@@ -98,20 +97,18 @@ pipeline {
                 sh '''
                     echo "Applying frontend deployment..."
 
-                    kubectl apply -f kubernetes/frontend/frontend-deployment.yaml \
-                    -n $K8S_NAMESPACE
+                    kubectl apply -f kubernetes/frontend/frontend-deployment.yaml -n ecommerce
 
                     echo "Updating frontend image..."
 
-                    kubectl set image deployment/$K8S_DEPLOYMENT \
-                    $K8S_CONTAINER=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG \
-                    -n $K8S_NAMESPACE
+                    kubectl set image deployment/ecommerce-frontend \
+                        ecommerce-frontend=102186470246.dkr.ecr.ap-south-1.amazonaws.com/ecommerce-frontend:${BUILD_NUMBER} \
+                        -n ecommerce
 
                     echo "Waiting for frontend rollout..."
 
-                    kubectl rollout status deployment/$K8S_DEPLOYMENT \
-                    -n $K8S_NAMESPACE \
-                    --timeout=180s
+                    kubectl rollout status deployment/ecommerce-frontend \
+                        -n ecommerce --timeout=180s
                 '''
             }
         }
