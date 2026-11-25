@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: ecommerce-frontend
-          image: 102186470246.dkr.ecr.ap-south-1.amazonaws.com/ecommerce-frontend:latest
+          image: 102186470246.dkr.ecr.ap-south-1.amazonaws.com/ecommerce-frontend:IMAGE_TAG_PLACEHOLDER
           imagePullPolicy: Always
 
           ports:
