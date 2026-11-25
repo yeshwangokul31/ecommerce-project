@@ -17,6 +17,7 @@ pipeline {
     }
 
     stages {
+
         stage('Checkout') {
             steps {
                 checkout scm
@@ -97,16 +98,36 @@ pipeline {
                 sh '''
                     set -e
 
-                    echo "Deploying frontend build: ${BUILD_NUMBER}"
+                    echo "Deploying frontend build: $IMAGE_TAG"
 
-                    sed "s|IMAGE_TAG_PLACEHOLDER|${BUILD_NUMBER}|g" \
+                    echo "Checking image in ECR..."
+
+                    aws ecr describe-images \
+                        --repository-name $ECR_REPOSITORY \
+                        --image-ids imageTag=$IMAGE_TAG \
+                        --region $AWS_REGION
+
+                    echo "Generating Kubernetes deployment manifest..."
+
+                    sed "s|IMAGE_TAG_PLACEHOLDER|$IMAGE_TAG|g" \
                         kubernetes/frontend/frontend-deployment.yaml \
-                        | kubectl apply -f -
+                        > frontend-deployment-rendered.yaml
+
+                    echo "Verifying generated image..."
+
+                    grep "image:" frontend-deployment-rendered.yaml
+
+                    echo "Applying frontend deployment..."
+
+                    kubectl apply -f frontend-deployment-rendered.yaml \
+                        -n $K8S_NAMESPACE
 
                     echo "Waiting for frontend rollout..."
 
-                    kubectl rollout status deployment/ecommerce-frontend \
-                        -n ecommerce --timeout=180s
+                    kubectl rollout status deployment/$K8S_DEPLOYMENT \
+                        -n $K8S_NAMESPACE --timeout=180s
+
+                    echo "Frontend deployment completed."
                 '''
             }
         }
@@ -114,14 +135,25 @@ pipeline {
         stage('Verify Deployment') {
             steps {
                 sh '''
-                    echo "Frontend Deployments"
+                    echo "Frontend Deployment"
+
                     kubectl get deployments -n $K8S_NAMESPACE
 
                     echo "Frontend Pods"
-                    kubectl get pods -n $K8S_NAMESPACE
+
+                    kubectl get pods -n $K8S_NAMESPACE -o wide
 
                     echo "Frontend Services"
+
                     kubectl get services -n $K8S_NAMESPACE
+
+                    echo "Deployed Image"
+
+                    kubectl get deployment $K8S_DEPLOYMENT \
+                        -n $K8S_NAMESPACE \
+                        -o jsonpath='{.spec.template.spec.containers[0].image}'
+
+                    echo
                 '''
             }
         }
