@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ecommerce-frontend
-  namespace: default
+  namespace: ecommerce
 
 spec:
   replicas: 2
