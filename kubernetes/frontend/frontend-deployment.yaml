@@ -2,20 +2,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: frontend
+  name: ecommerce-frontend
   namespace: ecommerce
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: frontend
+      app: ecommerce-frontend
   template:
     metadata:
       labels:
-        app: frontend
+        app: ecommerce-frontend
     spec:
       containers:
-        - name: frontend
+        - name: ecommerce-frontend
           image: 102186470246.dkr.ecr.ap-south-1.amazonaws.com/ecommerce-frontend:latest
           imagePullPolicy: Always
           ports:
