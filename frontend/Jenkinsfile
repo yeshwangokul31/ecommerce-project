@@ -95,15 +95,13 @@ pipeline {
         stage('Deploy Frontend') {
             steps {
                 sh '''
-                    echo "Applying frontend deployment..."
+                    set -e
 
-                    kubectl apply -f kubernetes/frontend/frontend-deployment.yaml -n ecommerce
+                    echo "Deploying frontend build: ${BUILD_NUMBER}"
 
-                    echo "Updating frontend image..."
-
-                    kubectl set image deployment/ecommerce-frontend \
-                        ecommerce-frontend=102186470246.dkr.ecr.ap-south-1.amazonaws.com/ecommerce-frontend:${BUILD_NUMBER} \
-                        -n ecommerce
+                    sed "s|IMAGE_TAG_PLACEHOLDER|${BUILD_NUMBER}|g" \
+                        kubernetes/frontend/frontend-deployment.yaml \
+                        | kubectl apply -f -
 
                     echo "Waiting for frontend rollout..."
 
